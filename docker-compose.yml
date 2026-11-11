@@ -1,0 +1,68 @@
+# Local stack: API + PostgreSQL + Redis.
+#   docker compose up -d --build
+#   docker compose run --rm migrate                         # create the tables (fresh database)
+#   docker compose exec api node dist/cli.js create-user admin
+services:
+  api:
+    build: .
+    ports:
+      - "${PORT:-7001}:7001"
+    env_file: .env
+    environment:
+      PORT: 7001
+      DB_HOST: db
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # One-off: apply Drizzle migrations (needs dev dependencies, so it uses the build stage).
+  migrate:
+    build:
+      context: .
+      target: build
+    profiles: ["tools"]
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+    command: ["npx", "drizzle-kit", "migrate"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-smart_stock_alert}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-smart_stock_alert}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    # appendonly: logouts survive a restart; noeviction: never silently drop a "revoked" key
+    command: redis-server --appendonly yes --maxmemory-policy noeviction
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:

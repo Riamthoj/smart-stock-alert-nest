@@ -1,0 +1,23 @@
+# dependencies / build
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# runtime data
+uploads/*
+!uploads/.gitkeep
+logs/
+*.log
+
+# editor / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
