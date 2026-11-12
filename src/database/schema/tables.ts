@@ -5,6 +5,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -14,7 +15,7 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { id, money, timestamps } from './columns.js';
+import { deletedAt, id, money, timestamps } from './columns.js';
 import {
   AlertStatus,
   AlertType,
@@ -114,6 +115,7 @@ export const customers = pgTable(
     profile: varchar('profile', { length: 500 }),
     is_active: boolean('is_active').notNull().default(true).$default(() => true),
     ...timestamps(),
+    deleted_at: deletedAt(), // soft delete: sales keep pointing at the customer
   },
   (t) => [
     primaryKey({ name: 'pk_customers', columns: [t.id] }),
@@ -159,6 +161,7 @@ export const products = pgTable(
     cost_price: money('cost_price').notNull(), // what the store paid
     price: money('price').notNull(), // selling price
     ...timestamps(),
+    deleted_at: deletedAt(), // soft delete: sale history keeps its products
   },
   (t) => [
     primaryKey({ name: 'pk_products', columns: [t.id] }),
@@ -367,6 +370,37 @@ export const payments = pgTable(
   ],
 );
 
+// ----------------------------------------------------------------- audit
+/**
+ * WHO changed WHAT, WHEN: one row per write request (POST/PUT/PATCH/DELETE)
+ * made with a token, written by ActivityLogInterceptor.
+ * No foreign keys on purpose: the trail must survive deleting the account or store.
+ */
+export const activityLogs = pgTable(
+  'activity_logs',
+  {
+    id: id(),
+    account_type: varchar('account_type', { length: 8 }).notNull(), // "user" | "owner"
+    account_id: uuid('account_id').notNull(),
+    store_id: uuid('store_id'), // the owner's store (null for platform admins)
+    method: varchar('method', { length: 8 }).notNull(),
+    route: varchar('route', { length: 200 }).notNull(), // pattern: /api/v1/products/:product_id
+    path: varchar('path', { length: 500 }).notNull(), // actual: /api/v1/products/0190...
+    status_code: integer('status_code').notNull(),
+    request_id: varchar('request_id', { length: 64 }),
+    ip: varchar('ip', { length: 64 }),
+    user_agent: varchar('user_agent', { length: 300 }),
+    body: jsonb('body'), // request body, secrets redacted, size-capped
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: 'pk_activity_logs', columns: [t.id] }),
+    index('ix_activity_logs_store_id_created_at').on(t.store_id, t.created_at),
+    index('ix_activity_logs_account_id_created_at').on(t.account_id, t.created_at),
+    index('ix_activity_logs_created_at').on(t.created_at),
+  ],
+);
+
 // ----------------------------------------------------------------- row types
 export type User = typeof users.$inferSelect;
 export type Store = typeof stores.$inferSelect;
@@ -380,3 +414,4 @@ export type StockAlert = typeof stockAlerts.$inferSelect;
 export type Sale = typeof sales.$inferSelect;
 export type SaleItem = typeof saleItems.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
+export type ActivityLog = typeof activityLogs.$inferSelect;

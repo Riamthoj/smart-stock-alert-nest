@@ -19,6 +19,12 @@ export class InventoriesRepository extends BaseRepository<typeof inventories> {
     return row;
   }
 
+  async deleteForProduct(storeId: string, productId: string): Promise<void> {
+    await this.db
+      .delete(inventories)
+      .where(and(eq(inventories.store_id, storeId), eq(inventories.product_id, productId)));
+  }
+
   listFiltered(filter: { storeId?: string; productId?: string; lowStock?: boolean }, options: ListOptions) {
     // available_qty <= reorder_level, computed in SQL
     const available = sql`${inventories.qty} - ${inventories.reserved_qty}`;

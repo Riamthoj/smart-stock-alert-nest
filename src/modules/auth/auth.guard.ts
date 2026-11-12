@@ -33,7 +33,9 @@ export class AuthGuard implements CanActivate {
     const claims = await this.auth.verify(token);
     const expected = this.reflector.getAllAndOverride<TokenType>(TOKEN_TYPE, targets);
     if (expected && claims.type !== expected) {
-      throw new UnauthorizedError(`This endpoint needs ${expected === 'owner' ? 'an' : 'a'} ${expected} token`);
+      throw new UnauthorizedError(
+        expected === 'owner' ? 'This endpoint needs an owner token' : 'This endpoint needs a user token',
+      );
     }
     const scope = await this.auth.scopeFor(claims);
     req.auth = { token, claims, scope };

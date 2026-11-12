@@ -39,6 +39,7 @@ src/
 ├── config/                    zod-validated env -> typed AppConfig (config.db.host ...)
 ├── common/                    framework-level building blocks
 │   ├── errors/                domain errors (NotFound, Conflict, BusinessRule ...)
+│   ├── i18n/                  msg`...` templates, Lao catalog, language negotiation
 │   ├── filters/               ONE error format for everything (incl. PG constraint races -> 409)
 │   ├── interceptors/          success envelope {success, message, code, data}
 │   ├── pipes/                 validation -> 422 {details: [{loc, msg, type}]}
@@ -49,10 +50,10 @@ src/
 │   ├── schema/                Drizzle tables = the existing Alembic schema, 1:1
 │   ├── repositories/          one per table, on a generic BaseRepository
 │   └── database.service.ts    pool + AMBIENT transactions (AsyncLocalStorage)
-├── infrastructure/            Redis (circuit breaker), list cache, rate limit, storage
+├── infrastructure/            Redis (circuit breaker), list cache, rate limit, storage, Discord alerting
 └── modules/<feature>/         controller + service + dto + presenter
     auth · users · stores · owners · customers · categories · products
-    inventories · stock-moves · alerts · sales · payments · health
+    inventories · stock-moves · alerts · sales · payments · activity-logs · health
 ```
 
 Dependencies point one way: **controller → service → repository → schema**. Features never import each other's internals. Shared data access lives in the global `DatabaseModule`, so there are no circular modules.
@@ -72,9 +73,43 @@ Dependencies point one way: **controller → service → repository → schema**
 - **Redis is optional.** With Redis down, cache misses go to the DB and rate limits are skipped. Logout returns 503 rather than pretending to succeed. `/health/ready` reports `degraded`.
 - **Safe uploads.** File type is detected from magic bytes, names are UUIDv7, there's a size cap, and the old file is deleted only after the DB commit succeeds.
 
+## Operations features
+
+### Audit trail: `GET /activity-logs`
+Every write (POST/PUT/PATCH/DELETE) made with a token is stored in `activity_logs`. Each row records who made it, which store, the route pattern and actual path, the status code, the request ID, the IP and user agent, and the body.
+- Failed attempts are recorded too (a 403 or 422 is worth knowing about). Exception: requests rejected by the global guards (401, rate limit, `@AdminOnly`) never reach the handler, so they aren't recorded.
+- Secrets such as `password` and `token` are masked as `***`, and bodies are capped at 4 KB.
+- Logging happens after the response and never fails the request.
+- Admins see everything. Store owners see their own store; staff can't read it.
+- Filters: `?store_id=&account_id=&method=&date_from=&date_to=`.
+- Rows older than `ACTIVITY_LOG_RETENTION_DAYS` (default 180) are purged daily. Switch it off with `ACTIVITY_LOG_ENABLED=false`.
+
+### Alerts for 500 errors: Discord
+Set `ALERT_DISCORD_WEBHOOK_URL` (Discord → channel → Integrations → Webhooks).
+- Unexpected errors (bugs, database down) and unhandled promise rejections post an embed with the route, account, store, request ID, root cause and stack.
+- **Query parameters are redacted**, so password hashes or personal data never reach the chat.
+- The same error on the same route is sent once per `ALERT_DEDUPE_SECONDS`, with a "+N more" count.
+- Expected errors (404/409/422...) never alert. Sending is fire-and-forget with a 3 s timeout.
+
+### Soft delete: products and customers
+- `DELETE` stamps `deleted_at`, and every read hides the row automatically (handled once, in `BaseRepository`).
+- See the trash with `GET /products?deleted=true` (or `/customers?deleted=true`), and bring a record back with `POST /products/{id}/restore` (or `/customers/{id}/restore`).
+- A product **already on sales can now be deleted**: sale lines and stock moves keep pointing at it.
+- Deleting a product also removes its inventory row and resolves its open alert, so it can't be sold. After a restore, create a new inventory to sell it again.
+- A barcode or phone that belongs to a deleted record answers 409 with "restore it instead", because the unique constraints still apply to it.
+
+### Error messages in Lao (ລາວ)
+- Clients choose the language with `?lang=lo` or `Accept-Language: lo-LA,…`; the server default is `DEFAULT_LANGUAGE` (en). The response carries `Content-Language`.
+- Messages are written as `` msg`Store ${id} not found` ``. The English template is the key in `src/common/i18n/catalog.lo.ts`, and translations may reorder the parameters.
+- Only record names (`term('Product')`) and nested messages are translated; user data never is.
+- A unit test fails if any error message in `src/` has no Lao translation.
+- **Branch on `error` (stable code), never on `message`.**
+- The Lao texts were written for this project: have a native speaker review `catalog.lo.ts` before release.
+
 ## Sharing the database with the FastAPI version
 
 - Point `DB_*` at the same database and **don't run `db:migrate`**: Alembic already created the identical schema. The tables, constraint names and indexes match exactly, and the Nest API was tested against an Alembic-created copy.
+- Apply only the additive changes with `psql -d smart_stock_alert -f drizzle/0001_audit_softdelete.sql` (the new `activity_logs` table and nullable `deleted_at` columns). The Python API keeps working, but it doesn't know `deleted_at`: it still **shows** soft-deleted products and customers.
 - Use the same `JWT_SECRET_KEY` and Redis: tokens, logouts and cache invalidation then work across both APIs.
 - Set `UPLOAD_DIR=../smart-stock-alert-api/uploads` so both APIs serve the same images.
 
@@ -84,6 +119,8 @@ Dependencies point one way: **controller → service → repository → schema**
 - `GET /payments` also accepts `?store_id=` for admins.
 - `POST /users` also rejects a duplicate phone with 409 (it was a 500).
 - Unique-constraint races that slip past the checks return 409 instead of 500.
+- `DELETE /products/{id}` and `DELETE /customers/{id}` are soft deletes (restorable), and products on sales can be deleted.
+- Products and customers include `deleted_at`. Errors honour `?lang=` / `Accept-Language` and send `Content-Language`.
 
 ## Scripts
 

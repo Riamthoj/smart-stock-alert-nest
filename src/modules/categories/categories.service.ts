@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConflictError, NotFoundError } from '../../common/errors/app-error.js';
+import { ConflictError, notFound } from '../../common/errors/app-error.js';
 import type { StoreFilterQueryDto } from '../../common/pagination/store-filter.dto.js';
 import { sentFields, withoutNulls } from '../../common/utils/objects.js';
 import { StoresRepository } from '../../database/repositories/accounts.repository.js';
@@ -9,6 +9,7 @@ import { ListCacheService } from '../../infrastructure/cache/list-cache.service.
 import { StorageService } from '../../infrastructure/storage/storage.service.js';
 import type { Scope } from '../auth/scope.js';
 import { CategoryCreateDto, CategoryUpdateDto } from './dto/category.dto.js';
+import { msg } from '../../common/i18n/message.js';
 
 export const presentCategory = (c: Category) => ({
   id: c.id,
@@ -49,13 +50,13 @@ export class CategoriesService {
 
   private async assertNameFree(storeId: string, name: string | undefined, current?: Category) {
     if (name && name !== current?.name && (await this.categories.getByName(storeId, name))) {
-      throw new ConflictError(`Category '${name}' already exists in this store`);
+      throw new ConflictError(msg`Category '${name}' already exists in this store`);
     }
   }
 
   async create(scope: Scope, dto: CategoryCreateDto): Promise<Category> {
     const storeId = scope.checkCreate(dto.store_id);
-    if (!(await this.stores.findById(storeId))) throw new NotFoundError(`Store ${storeId} not found`);
+    if (!(await this.stores.findById(storeId))) throw notFound('Store', storeId);
     await this.assertNameFree(storeId, dto.name);
     const category = await this.categories.insert({ ...dto, store_id: storeId });
     await this.cache.invalidateStore(storeId);

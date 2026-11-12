@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { NotFoundError } from '../../common/errors/app-error.js';
+import { notFound } from '../../common/errors/app-error.js';
 import { sentFields, withoutNulls } from '../../common/utils/objects.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { StoresRepository } from '../../database/repositories/accounts.repository.js';
@@ -32,7 +32,7 @@ export class StoresService {
 
   async get(scope: Scope, id: string): Promise<Store> {
     const store = await this.stores.findById(id);
-    if (!store) throw new NotFoundError(`Store ${id} not found`);
+    if (!store) throw notFound('Store', id);
     scope.check(store.id, 'Store', id);
     return store;
   }

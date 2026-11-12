@@ -59,10 +59,20 @@ export class ProductsController {
 
   @Delete(':product_id')
   @HttpCode(204)
-  @ApiOperation({ summary: 'Delete a product' })
-  @ApiResponse({ status: 409, description: 'The product appears on sales' })
+  @ApiOperation({
+    summary: 'Delete a product (soft: restorable, sale history kept; removes its inventory and open alert)',
+  })
   async delete(@CurrentScope() scope: Scope, @IdParam('product_id') id: string) {
     await this.products.delete(scope, id);
+  }
+
+  @Post(':product_id/restore')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Restore a deleted product (create a new inventory to sell it again)' })
+  @ApiResponse({ status: 422, description: 'The product is not deleted' })
+  @ResponseMessage('Product restored')
+  async restore(@CurrentScope() scope: Scope, @IdParam('product_id') id: string) {
+    return presentProduct(await this.products.restore(scope, id));
   }
 
   @Put(':product_id/image')

@@ -8,6 +8,13 @@
       "when": 1794391358741,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794454199834,
+      "tag": "0001_audit_softdelete",
+      "breakpoints": true
     }
   ]
 }

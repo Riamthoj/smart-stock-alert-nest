@@ -1,15 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { and, eq, inArray, like, max } from 'drizzle-orm';
 import { searchAny } from '../../common/utils/search.js';
-import { categories, customers, products, saleItems } from '../schema/index.js';
+import { categories, customers, products } from '../schema/index.js';
 import { BaseRepository, ListOptions } from './base.repository.js';
 
 @Injectable()
 export class CustomersRepository extends BaseRepository<typeof customers> {
   protected readonly table = customers;
 
+  /** Includes soft-deleted customers: the (store_id, phone) unique constraint still applies to them. */
   getByPhone(storeId: string, phone: string) {
-    return this.findOne(and(eq(customers.store_id, storeId), eq(customers.phone, phone)));
+    return this.findOne(and(eq(customers.store_id, storeId), eq(customers.phone, phone)), { withDeleted: true });
   }
 
   /** Highest code that starts with `prefix` (codes are zero-padded, so MAX works). */
@@ -52,22 +53,18 @@ export class CategoriesRepository extends BaseRepository<typeof categories> {
 export class ProductsRepository extends BaseRepository<typeof products> {
   protected readonly table = products;
 
+  /** Includes soft-deleted products: the (store_id, bar_code) unique constraint still applies to them. */
   getByBarCode(storeId: string, barCode: string) {
-    return this.findOne(and(eq(products.store_id, storeId), eq(products.bar_code, barCode)));
+    return this.findOne(and(eq(products.store_id, storeId), eq(products.bar_code, barCode)), { withDeleted: true });
   }
 
+  /** Live products only: a deleted product can't be sold. */
   findManyByIds(ids: string[]) {
     if (ids.length === 0) return Promise.resolve([]);
-    return this.db.select().from(products).where(inArray(products.id, ids));
-  }
-
-  async appearsOnSales(productId: string): Promise<boolean> {
-    const [row] = await this.db
-      .select({ id: saleItems.id })
-      .from(saleItems)
-      .where(eq(saleItems.product_id, productId))
-      .limit(1);
-    return row !== undefined;
+    return this.db
+      .select()
+      .from(products)
+      .where(and(inArray(products.id, ids), this.deletedFilter()));
   }
 
   listFiltered(filter: { storeId?: string; categoryId?: string; search?: string }, options: ListOptions) {

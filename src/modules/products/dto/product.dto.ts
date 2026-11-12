@@ -1,11 +1,15 @@
 import { IsOptional, IsString, Length } from 'class-validator';
 import { StoreFilterQueryDto } from '../../../common/pagination/store-filter.dto.js';
-import { IsMoney, OptionalText, OptionalUuid } from '../../../common/validation/validators.js';
+import { IsMoney, OptionalText, OptionalUuid, QueryBool } from '../../../common/validation/validators.js';
 
 export class ProductsQueryDto extends StoreFilterQueryDto {
   /** Only products of this category */
   @OptionalUuid()
   category_id?: string;
+
+  /** true = show the trash (soft-deleted products) instead */
+  @QueryBool()
+  deleted?: boolean;
 }
 
 export class ProductCreateDto {

@@ -75,6 +75,18 @@ export class AppConfig {
     };
   }
 
+  get i18n() {
+    return { defaultLanguage: this.env.DEFAULT_LANGUAGE };
+  }
+
+  get alerting() {
+    return { discordWebhookUrl: this.env.ALERT_DISCORD_WEBHOOK_URL || undefined, dedupeSeconds: this.env.ALERT_DEDUPE_SECONDS };
+  }
+
+  get activityLog() {
+    return { enabled: this.env.ACTIVITY_LOG_ENABLED, retentionDays: this.env.ACTIVITY_LOG_RETENTION_DAYS };
+  }
+
   get jwt() {
     return { secret: this.env.JWT_SECRET_KEY, expiresInSeconds: this.env.ACCESS_TOKEN_EXPIRE_MINUTES * 60 };
   }

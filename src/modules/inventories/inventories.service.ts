@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BusinessRuleError, ConflictError, NotFoundError } from '../../common/errors/app-error.js';
+import { BusinessRuleError, ConflictError, notFound, NotFoundError } from '../../common/errors/app-error.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { ProductsRepository } from '../../database/repositories/catalog.repository.js';
 import { InventoriesRepository, StockMovesRepository } from '../../database/repositories/stock.repository.js';
@@ -7,6 +7,7 @@ import { MoveType, type Inventory, type StockMove } from '../../database/schema/
 import type { Scope } from '../auth/scope.js';
 import { AlertsService, availableQty, isLowStock } from '../alerts/alerts.service.js';
 import { InventoriesQueryDto, InventoryCreateDto, InventoryUpdateDto, StockAdjustmentDto } from './dto/inventory.dto.js';
+import { msg } from '../../common/i18n/message.js';
 
 export const presentInventory = (i: Inventory) => ({
   id: i.id,
@@ -68,7 +69,7 @@ export class InventoriesService {
     const newQty = inventory.qty + delta;
     if (newQty < inventory.reserved_qty) {
       throw new BusinessRuleError(
-        `Insufficient stock: available ${availableQty(inventory)}, tried to remove ${-delta}`,
+        msg`Insufficient stock: available ${availableQty(inventory)}, tried to remove ${-delta}`,
       );
     }
     const updated = await this.inventories.update(inventory.id, { qty: newQty });
@@ -94,7 +95,7 @@ export class InventoriesService {
     const storeId = scope.checkCreate(dto.store_id);
     if (dto.reserved_qty > dto.qty) throw new BusinessRuleError('reserved_qty cannot be greater than qty');
     const product = await this.products.findById(dto.product_id);
-    if (!product) throw new NotFoundError(`Product ${dto.product_id} not found`);
+    if (!product) throw notFound('Product', dto.product_id);
     if (product.store_id !== storeId) throw new BusinessRuleError('Product belongs to a different store');
     if (await this.inventories.getForProduct(storeId, dto.product_id)) {
       throw new ConflictError('This product already has an inventory in this store');
@@ -124,7 +125,7 @@ export class InventoriesService {
       const newQty = dto.qty ?? inventory.qty;
       const newReserved = dto.reserved_qty ?? inventory.reserved_qty;
       if (newReserved > newQty) {
-        throw new BusinessRuleError(`reserved_qty (${newReserved}) cannot be greater than qty (${newQty})`);
+        throw new BusinessRuleError(msg`reserved_qty (${newReserved}) cannot be greater than qty (${newQty})`);
       }
       // Lower `reserved` first, so the qty move's "qty >= reserved" check uses the new value.
       inventory = await this.inventories.update(id, {
@@ -162,7 +163,7 @@ export class InventoriesService {
     return this.database.transaction(async () => {
       const inventory = await this.inventories.getForProduct(storeId, productId, { lock: true });
       if (!inventory) {
-        throw new NotFoundError(`No inventory for product ${productId} in store ${storeId}; create one first`);
+        throw new NotFoundError(msg`No inventory for product ${productId} in store ${storeId}; create one first`);
       }
       return this.applyMove(inventory, change);
     });
@@ -171,7 +172,7 @@ export class InventoriesService {
   /** Used by SalesService INSIDE the sale's transaction. */
   async removeForSale(storeId: string, productId: string, qty: number, reference: string): Promise<StockMove> {
     const inventory = await this.inventories.getForProduct(storeId, productId, { lock: true });
-    if (!inventory) throw new BusinessRuleError(`Product ${productId} has no inventory in this store`);
+    if (!inventory) throw new BusinessRuleError(msg`Product ${productId} has no inventory in this store`);
     return (await this.applyMove(inventory, { delta: -qty, moveType: MoveType.OUT, reference })).move;
   }
 

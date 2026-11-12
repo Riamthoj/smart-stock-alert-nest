@@ -48,6 +48,16 @@ export const envSchema = z
     RATE_LIMIT_LOGIN_PER_MINUTE: int(5),
     RATE_LIMIT_LOGIN_IP_PER_MINUTE: int(20),
 
+    DEFAULT_LANGUAGE: z.enum(['en', 'lo']).default('en'),
+
+    // Alerting: unexpected 500 errors -> Discord channel (empty = disabled)
+    ALERT_DISCORD_WEBHOOK_URL: z.union([z.url(), z.literal('')]).default(''),
+    ALERT_DEDUPE_SECONDS: int(300),
+
+    // Audit trail of every write request
+    ACTIVITY_LOG_ENABLED: bool(true),
+    ACTIVITY_LOG_RETENTION_DAYS: int(180),
+
     JWT_SECRET_KEY: z.string().min(1).default(DEV_JWT_SECRET),
     ACCESS_TOKEN_EXPIRE_MINUTES: int(60 * 24),
   })

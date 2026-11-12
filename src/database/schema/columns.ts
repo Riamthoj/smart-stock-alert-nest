@@ -22,3 +22,9 @@ export const timestamps = () => ({
 
 /** NUMERIC(14,2). Read as a string ("8000.00") - see common/utils/money.ts. */
 export const money = (name: string) => numeric(name, { precision: 14, scale: 2 });
+
+/**
+ * Soft delete: NULL = live, a timestamp = deleted at that moment.
+ * BaseRepository hides these rows from every read automatically.
+ */
+export const deletedAt = () => timestamp('deleted_at', { withTimezone: true });

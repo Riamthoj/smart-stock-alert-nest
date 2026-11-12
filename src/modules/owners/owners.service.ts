@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BusinessRuleError, ConflictError, NotFoundError } from '../../common/errors/app-error.js';
+import { BusinessRuleError, ConflictError, notFound } from '../../common/errors/app-error.js';
 import type { PaginationQueryDto } from '../../common/pagination/pagination.dto.js';
 import { sentFields } from '../../common/utils/objects.js';
 import { OwnersRepository, StoresRepository } from '../../database/repositories/accounts.repository.js';
@@ -9,6 +9,7 @@ import { PasswordService } from '../auth/password.service.js';
 import { RevocationService } from '../auth/revocation.service.js';
 import type { Scope } from '../auth/scope.js';
 import { OwnerAccountDto, OwnerCreateDto, OwnerUpdateDto } from './dto/owner.dto.js';
+import { msg } from '../../common/i18n/message.js';
 
 /**
  * Store accounts. Rules:
@@ -42,10 +43,10 @@ export class OwnersService {
   /** Insert an account (no store checks): shared with StoresService.create. */
   async addOwner(storeId: string, account: OwnerAccountDto, flags: { isOwner: boolean; isPrimary?: boolean }) {
     if (await this.owners.getByUsername(account.username)) {
-      throw new ConflictError(`Username '${account.username}' is already taken`);
+      throw new ConflictError(msg`Username '${account.username}' is already taken`);
     }
     if (account.phone && (await this.owners.getByPhone(account.phone))) {
-      throw new ConflictError(`Phone '${account.phone}' is already registered`);
+      throw new ConflictError(msg`Phone '${account.phone}' is already registered`);
     }
     return this.owners.insert({
       store_id: storeId,
@@ -61,7 +62,7 @@ export class OwnersService {
   async create(scope: Scope, dto: OwnerCreateDto): Promise<Owner> {
     const storeId = scope.checkCreate(dto.store_id);
     scope.requireStoreOwner(); // staff can't add people
-    if (!(await this.stores.findById(storeId))) throw new NotFoundError(`Store ${storeId} not found`);
+    if (!(await this.stores.findById(storeId))) throw notFound('Store', storeId);
     const owner = await this.addOwner(storeId, dto, { isOwner: dto.is_owner });
     this.logger.log(`Owner created id=${owner.id} username=${owner.username} store=${owner.store_id}`);
     return owner;
@@ -72,7 +73,7 @@ export class OwnersService {
     scope.requireStoreOwner(id); // staff: only their own profile
     const changes = sentFields(dto);
     if (changes.phone && changes.phone !== current.phone && (await this.owners.getByPhone(changes.phone))) {
-      throw new ConflictError(`Phone '${changes.phone}' is already registered`);
+      throw new ConflictError(msg`Phone '${changes.phone}' is already registered`);
     }
     const owner = await this.owners.update(id, changes);
     await this.storage.cleanupReplaced(current.profile, owner.profile);

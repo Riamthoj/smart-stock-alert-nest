@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConflictError, NotFoundError } from '../../common/errors/app-error.js';
+import { ConflictError, notFound } from '../../common/errors/app-error.js';
 import type { PaginationQueryDto } from '../../common/pagination/pagination.dto.js';
 import { sentFields } from '../../common/utils/objects.js';
 import { UsersRepository } from '../../database/repositories/accounts.repository.js';
@@ -8,6 +8,7 @@ import { StorageService } from '../../infrastructure/storage/storage.service.js'
 import { PasswordService } from '../auth/password.service.js';
 import { RevocationService } from '../auth/revocation.service.js';
 import { UserCreateDto, UserUpdateDto } from './dto/user.dto.js';
+import { msg } from '../../common/i18n/message.js';
 
 @Injectable()
 export class UsersService {
@@ -26,19 +27,19 @@ export class UsersService {
 
   async get(id: string): Promise<User> {
     const user = await this.users.findById(id);
-    if (!user) throw new NotFoundError(`User ${id} not found`);
+    if (!user) throw notFound('User', id);
     return user;
   }
 
   private async assertPhoneFree(phone: string | null | undefined, current?: User): Promise<void> {
     if (phone && phone !== current?.phone && (await this.users.getByPhone(phone))) {
-      throw new ConflictError(`Phone '${phone}' is already registered`);
+      throw new ConflictError(msg`Phone '${phone}' is already registered`);
     }
   }
 
   async create({ password, ...data }: UserCreateDto): Promise<User> {
     if (await this.users.getByUsername(data.username)) {
-      throw new ConflictError(`Username '${data.username}' is already taken`);
+      throw new ConflictError(msg`Username '${data.username}' is already taken`);
     }
     await this.assertPhoneFree(data.phone);
     const user = await this.users.insert({ ...data, password_hash: await this.passwords.hash(password) });

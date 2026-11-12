@@ -1,5 +1,12 @@
 import { IsBoolean, IsString, Length } from 'class-validator';
-import { OptionalText, OptionalUuid } from '../../../common/validation/validators.js';
+import { StoreFilterQueryDto } from '../../../common/pagination/store-filter.dto.js';
+import { OptionalText, OptionalUuid, QueryBool } from '../../../common/validation/validators.js';
+
+export class CustomersQueryDto extends StoreFilterQueryDto {
+  /** true = show the trash (soft-deleted customers) instead */
+  @QueryBool()
+  deleted?: boolean;
+}
 
 export class CustomerCreateDto {
   /** Store this customer belongs to. Optional with an owner login: defaults to your store */

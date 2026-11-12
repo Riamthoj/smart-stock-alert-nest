@@ -1,4 +1,4 @@
-import { BusinessRuleError, ForbiddenError, NotFoundError } from '../../common/errors/app-error.js';
+import { BusinessRuleError, ForbiddenError, notFound } from '../../common/errors/app-error.js';
 import type { Owner, User } from '../../database/schema/index.js';
 
 export type TokenType = 'user' | 'owner';
@@ -47,12 +47,12 @@ export class Scope {
 
   /** Hide records of other stores. */
   check(storeId: string, what: string, recordId: string): void {
-    if (!this.isAdmin && storeId !== this.storeId) throw new NotFoundError(`${what} ${recordId} not found`);
+    if (!this.isAdmin && storeId !== this.storeId) throw notFound(what, recordId);
   }
 
   /** Load-then-check in one call: `const p = scope.visible(await repo.findById(id), 'Product', id)`. */
   visible<T extends { store_id: string }>(row: T | undefined, what: string, id: string): T {
-    if (!row) throw new NotFoundError(`${what} ${id} not found`);
+    if (!row) throw notFound(what, id);
     this.check(row.store_id, what, id);
     return row;
   }

@@ -5,6 +5,7 @@ import type { Redis } from 'ioredis';
 import { AppConfig } from '../../config/app-config.js';
 import { TooManyRequestsError } from '../../common/errors/app-error.js';
 import { RedisService } from '../redis/redis.service.js';
+import { Message, msg } from '../../common/i18n/message.js';
 
 /**
  * SLIDING WINDOW in one atomic Lua script (no race between two requests,
@@ -74,7 +75,7 @@ export class RateLimitService {
     if (!result) return;
     const headers = { 'X-RateLimit-Limit': String(result.limit), 'X-RateLimit-Remaining': String(result.remaining) };
     if (!result.allowed) {
-      throw new TooManyRequestsError(`${message}. Try again in ${result.retryAfter} seconds`, {
+      throw new TooManyRequestsError(msg`${new Message(message)}. Try again in ${result.retryAfter} seconds`, {
         ...headers,
         'Retry-After': String(result.retryAfter),
       });

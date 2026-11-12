@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BusinessRuleError, NotFoundError } from '../../common/errors/app-error.js';
+import { BusinessRuleError, notFound } from '../../common/errors/app-error.js';
 import { nextDailyCode, todayMMDDYY } from '../../common/utils/daily-code.js';
 import { fromCents, toCents, type Cents } from '../../common/utils/money.js';
 import { AppConfig } from '../../config/app-config.js';
@@ -15,6 +15,7 @@ import { StoreStatus } from '../../database/schema/index.js';
 import type { Scope } from '../auth/scope.js';
 import { InventoriesService } from '../inventories/inventories.service.js';
 import { SaleCreateDto, SalesQueryDto } from './dto/sale.dto.js';
+import { msg } from '../../common/i18n/message.js';
 
 const RECEIPT_PREFIX = 'RC';
 const RECEIPT_DIGITS = 4; // RC1108260001 -> up to 9999 sales per store per day
@@ -65,7 +66,7 @@ export class SalesService {
     const prefix = `${RECEIPT_PREFIX}${todayMMDDYY(this.config.app.timezone)}`;
     await this.database.advisoryLock(`${storeId}:${prefix}`); // same key as the FastAPI version
     const receipt = nextDailyCode(prefix, await this.sales.lastReceipt(storeId, prefix), RECEIPT_DIGITS);
-    if (!receipt) throw new BusinessRuleError(`Daily receipt limit reached for ${prefix}`);
+    if (!receipt) throw new BusinessRuleError(msg`Daily receipt limit reached for ${prefix}`);
     return receipt;
   }
 
@@ -76,16 +77,16 @@ export class SalesService {
 
     // ---- validate references (cheap reads, before the transaction)
     const store = await this.stores.findById(storeId);
-    if (!store) throw new NotFoundError(`Store ${storeId} not found`);
+    if (!store) throw notFound('Store', storeId);
     if (store.status === StoreStatus.BLOCK) throw new BusinessRuleError('This store is blocked and cannot make sales');
 
     const seller = await this.owners.findById(ownerId);
-    if (!seller) throw new NotFoundError(`Owner ${ownerId} not found`);
+    if (!seller) throw notFound('Owner', ownerId);
     if (seller.store_id !== storeId) throw new BusinessRuleError('The seller does not belong to this store');
 
     if (dto.customer_id) {
       const customer = await this.customers.findById(dto.customer_id);
-      if (!customer) throw new NotFoundError(`Customer ${dto.customer_id} not found`);
+      if (!customer) throw notFound('Customer', dto.customer_id);
       if (customer.store_id !== storeId) throw new BusinessRuleError('The customer belongs to a different store');
     }
 
@@ -96,9 +97,9 @@ export class SalesService {
     // ---- price snapshot + totals, in exact integer cents
     const lines = dto.items.map((item) => {
       const product = products.get(item.product_id);
-      if (!product) throw new NotFoundError(`Product ${item.product_id} not found`);
+      if (!product) throw notFound('Product', item.product_id);
       if (product.store_id !== storeId) {
-        throw new BusinessRuleError(`Product '${product.name}' belongs to a different store`);
+        throw new BusinessRuleError(msg`Product '${product.name}' belongs to a different store`);
       }
       const unitPrice: Cents = item.unit_price != null ? toCents(item.unit_price) : toCents(product.price);
       return { product_id: product.id, qty: item.qty, unitPrice, costPrice: toCents(product.cost_price) };
@@ -107,7 +108,7 @@ export class SalesService {
     const discount = toCents(dto.discount);
     const tax = toCents(dto.tax);
     if (discount > subtotal) {
-      throw new BusinessRuleError(`Discount (${fromCents(discount)}) is larger than the subtotal (${fromCents(subtotal)})`);
+      throw new BusinessRuleError(msg`Discount (${fromCents(discount)}) is larger than the subtotal (${fromCents(subtotal)})`);
     }
     const total = subtotal - discount + tax;
 

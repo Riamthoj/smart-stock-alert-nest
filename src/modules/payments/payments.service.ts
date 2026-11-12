@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BusinessRuleError, NotFoundError } from '../../common/errors/app-error.js';
+import { BusinessRuleError, notFound } from '../../common/errors/app-error.js';
 import { fromCents, moneyToNumber, toCents, type Cents } from '../../common/utils/money.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaymentsRepository, SalesRepository } from '../../database/repositories/sales.repository.js';
@@ -12,6 +12,7 @@ import {
 } from '../../database/schema/index.js';
 import type { Scope } from '../auth/scope.js';
 import { PaymentCreateDto, PaymentsQueryDto } from './dto/payment.dto.js';
+import { msg } from '../../common/i18n/message.js';
 
 export const presentPayment = (p: Payment) => ({
   id: p.id,
@@ -60,7 +61,7 @@ export class PaymentsService {
 
   async get(scope: Scope, id: string): Promise<Payment> {
     const payment = await this.payments.findById(id);
-    if (!payment) throw new NotFoundError(`Payment ${id} not found`);
+    if (!payment) throw notFound('Payment', id);
     scope.visible(await this.sales.findById(payment.sale_id), 'Payment', id); // visibility = the sale's store
     return payment;
   }
@@ -70,8 +71,7 @@ export class PaymentsService {
     const total = toCents(sale.total);
     if (already + adding > total) {
       throw new BusinessRuleError(
-        `Payment too large: sale total ${fromCents(total)}, already paid/pending ${fromCents(already)}, ` +
-          `remaining ${fromCents(total - already)}`,
+        msg`Payment too large: sale total ${fromCents(total)}, already paid/pending ${fromCents(already)}, remaining ${fromCents(total - already)}`,
       );
     }
   }
@@ -92,7 +92,7 @@ export class PaymentsService {
       const sale = await this.visibleSale(scope, existing.sale_id, { lock: true });
       const payment = (await this.payments.findById(id))!; // re-read under the lock
       if (!PAYMENT_TRANSITIONS[payment.status].includes(status)) {
-        throw new BusinessRuleError(`Cannot change payment status from '${payment.status}' to '${status}'`);
+        throw new BusinessRuleError(msg`Cannot change payment status from '${payment.status}' to '${status}'`);
       }
       // Re-activating money (e.g. failed -> paid is not allowed today, but stay safe) must still fit the total.
       if (ACTIVE_PAYMENT_STATUSES.includes(status) && !ACTIVE_PAYMENT_STATUSES.includes(payment.status)) {

@@ -5,6 +5,7 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
 import { configureApp, setupSwagger } from './app.setup.js';
 import { AppConfig } from './config/app-config.js';
+import { AlertingService } from './infrastructure/alerting/alerting.service.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
@@ -13,6 +14,13 @@ async function bootstrap(): Promise<void> {
 
   app.useLogger(logger);
   configureApp(app);
+
+  // Crashes outside a request (a forgotten await, a timer...) are alerted too.
+  const alerting = app.get(AlertingService);
+  process.on('unhandledRejection', (reason) => {
+    logger.error(`Unhandled promise rejection: ${String(reason)}`, 'Process');
+    alerting.reportError(reason, { path: 'unhandledRejection' });
+  });
   if (!cfg.isProduction) setupSwagger(app);
 
   await app.listen(cfg.port);

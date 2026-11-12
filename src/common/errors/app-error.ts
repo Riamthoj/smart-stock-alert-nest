@@ -1,4 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
+import { Message, msg, term } from '../i18n/message.js';
 
 /**
  * Domain errors. Services throw these and know nothing about HTTP;
@@ -7,16 +8,22 @@ import { HttpStatus } from '@nestjs/common';
  *   { "success": false, "message": "...", "code": 404, "error": "not_found" }
  *
  * Adding a new error type = a 3-line subclass, no filter changes.
+ *
+ * The message may be a translatable msg`...` template (see common/i18n):
+ *   throw new ConflictError(msg`Phone '${phone}' is already registered`);
  */
 export class AppError extends Error {
   readonly status: number = HttpStatus.INTERNAL_SERVER_ERROR;
   readonly code: string = 'internal_error';
+  /** The original (translatable) message; `message` is its English text. */
+  readonly i18n: Message | string;
 
   constructor(
-    message = 'Something went wrong',
+    message: Message | string = 'Something went wrong',
     readonly headers?: Record<string, string>,
   ) {
-    super(message);
+    super(String(message));
+    this.i18n = message;
     this.name = new.target.name;
   }
 }
@@ -26,6 +33,9 @@ export class NotFoundError extends AppError {
   override readonly status = HttpStatus.NOT_FOUND;
   override readonly code = 'not_found';
 }
+
+/** 404 for a record: notFound('Product', id) -> "Product <id> not found" (translated). */
+export const notFound = (what: string, id: string) => new NotFoundError(msg`${term(what)} ${id} not found`);
 
 /** 409: clashes with existing data (duplicate barcode, username...). */
 export class ConflictError extends AppError {

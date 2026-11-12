@@ -9,6 +9,7 @@ import {
   UnsupportedFileError,
 } from '../../common/errors/app-error.js';
 import { uuidv7 } from '../../common/utils/uuid7.js';
+import { msg } from '../../common/i18n/message.js';
 
 export const UPLOAD_URL_PREFIX = '/uploads';
 
@@ -49,7 +50,7 @@ export class StorageService {
   async saveImage(file: Express.Multer.File | undefined, folder: UploadFolder): Promise<string> {
     if (!file) throw new RequestValidationError([{ loc: ['body', 'file'], msg: 'Field required', type: 'missing' }]);
     const { maxBytes, maxMb } = this.config.upload;
-    if (file.size > maxBytes) throw new FileTooLargeError(`File is larger than ${maxMb} MB`);
+    if (file.size > maxBytes) throw new FileTooLargeError(msg`File is larger than ${maxMb} MB`);
     if (file.size === 0) throw new UnsupportedFileError('The file is empty');
     const ext = this.detectImage(file.buffer.subarray(0, 12));
     if (!ext) throw new UnsupportedFileError('Only JPEG, PNG, WEBP or GIF images are allowed');

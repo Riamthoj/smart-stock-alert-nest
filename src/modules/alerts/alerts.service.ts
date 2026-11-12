@@ -13,6 +13,7 @@ import {
   type StockAlert,
 } from '../../database/schema/index.js';
 import type { Scope } from '../auth/scope.js';
+import { msg, term } from '../../common/i18n/message.js';
 
 export class AlertsQueryDto extends StoreFilterQueryDto {
   /** Only this product */
@@ -110,7 +111,7 @@ export class AlertsService {
 
   async resolve(scope: Scope, id: string): Promise<StockAlert> {
     const alert = await this.get(scope, id);
-    if (alert.status === AlertStatus.RESOLVED) throw new BusinessRuleError(`Alert ${id} is already resolved`);
+    if (alert.status === AlertStatus.RESOLVED) throw new BusinessRuleError(msg`${term('Alert')} ${id} is already resolved`);
     return this.markResolved(id);
   }
 

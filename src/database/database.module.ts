@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { DatabaseService } from './database.service.js';
+import { ActivityLogsRepository } from './repositories/activity-logs.repository.js';
 import { OwnersRepository, StoresRepository, UsersRepository } from './repositories/accounts.repository.js';
 import { CategoriesRepository, CustomersRepository, ProductsRepository } from './repositories/catalog.repository.js';
 import {
@@ -22,6 +23,7 @@ const repositories = [
   SalesRepository,
   SaleItemsRepository,
   PaymentsRepository,
+  ActivityLogsRepository,
 ];
 
 /**

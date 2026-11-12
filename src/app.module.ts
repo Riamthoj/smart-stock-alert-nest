@@ -11,6 +11,7 @@ import { AppValidationPipe } from './common/pipes/validation.pipe.js';
 import { AppConfig, AppConfigModule } from './config/app-config.js';
 import { DatabaseModule } from './database/database.module.js';
 import { InfrastructureModule } from './infrastructure/infrastructure.module.js';
+import { ActivityLogsModule } from './modules/activity-logs/activity-logs.module.js';
 import { AlertsModule } from './modules/alerts/alerts.module.js';
 import { Public } from './modules/auth/auth.decorators.js';
 import { AuthModule } from './modules/auth/auth.module.js';
@@ -85,6 +86,7 @@ class RootController {
     AlertsModule,
     SalesModule,
     PaymentsModule,
+    ActivityLogsModule,
   ],
   controllers: [RootController, HealthController],
   providers: [

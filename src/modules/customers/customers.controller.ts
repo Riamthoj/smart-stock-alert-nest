@@ -3,14 +3,13 @@ import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { createExamples } from '../../common/api-examples.js';
 import { ResponseMessage } from '../../common/decorators/response.decorators.js';
 import { presentPage } from '../../common/pagination/pagination.dto.js';
-import { StoreFilterQueryDto } from '../../common/pagination/store-filter.dto.js';
 import { IdParam } from '../../common/validation/validators.js';
 import type { Customer } from '../../database/schema/index.js';
 import { ImageUpload } from '../../infrastructure/storage/image-upload.decorator.js';
 import { ApiAuth, CurrentScope } from '../auth/auth.decorators.js';
 import type { Scope } from '../auth/scope.js';
 import { CustomersService } from './customers.service.js';
-import { CustomerActiveDto, CustomerCreateDto, CustomerUpdateDto } from './dto/customer.dto.js';
+import { CustomerActiveDto, CustomerCreateDto, CustomersQueryDto, CustomerUpdateDto } from './dto/customer.dto.js';
 
 const present = (c: Customer) => ({
   id: c.id,
@@ -22,6 +21,7 @@ const present = (c: Customer) => ({
   is_active: c.is_active,
   created_at: c.created_at,
   updated_at: c.updated_at,
+  deleted_at: c.deleted_at,
 });
 
 @ApiTags('customers')
@@ -33,7 +33,7 @@ export class CustomersController {
   @Get()
   @ApiOperation({ summary: 'Get all customers (search: code, name, phone)' })
   @ResponseMessage('Customers retrieved')
-  async list(@CurrentScope() scope: Scope, @Query() query: StoreFilterQueryDto) {
+  async list(@CurrentScope() scope: Scope, @Query() query: CustomersQueryDto) {
     return presentPage(await this.customers.list(scope, query), query, present);
   }
 
@@ -70,9 +70,18 @@ export class CustomersController {
 
   @Delete(':customer_id')
   @HttpCode(204)
-  @ApiOperation({ summary: 'Delete a customer' })
+  @ApiOperation({ summary: 'Delete a customer (soft: restorable, past sales keep it)' })
   async delete(@CurrentScope() scope: Scope, @IdParam('customer_id') id: string) {
     await this.customers.delete(scope, id);
+  }
+
+  @Post(':customer_id/restore')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Restore a deleted customer' })
+  @ApiResponse({ status: 422, description: 'The customer is not deleted' })
+  @ResponseMessage('Customer restored')
+  async restore(@CurrentScope() scope: Scope, @IdParam('customer_id') id: string) {
+    return present(await this.customers.restore(scope, id));
   }
 
   @Put(':customer_id/profile')

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BusinessRuleError, ConflictError, NotFoundError } from '../../common/errors/app-error.js';
-import type { StoreFilterQueryDto } from '../../common/pagination/store-filter.dto.js';
+import { BusinessRuleError, ConflictError, notFound } from '../../common/errors/app-error.js';
+import { msg, term } from '../../common/i18n/message.js';
 import { nextDailyCode, todayMMDDYY } from '../../common/utils/daily-code.js';
 import { sentFields, withoutNulls } from '../../common/utils/objects.js';
 import { AppConfig } from '../../config/app-config.js';
@@ -10,7 +10,7 @@ import { CustomersRepository } from '../../database/repositories/catalog.reposit
 import type { Customer } from '../../database/schema/index.js';
 import { StorageService } from '../../infrastructure/storage/storage.service.js';
 import type { Scope } from '../auth/scope.js';
-import { CustomerCreateDto, CustomerUpdateDto } from './dto/customer.dto.js';
+import { CustomerCreateDto, CustomersQueryDto, CustomerUpdateDto } from './dto/customer.dto.js';
 
 const CODE_PREFIX = 'CUS';
 const CODE_DIGITS = 4; // CUS1108260001 -> up to 9999 new customers per day
@@ -27,10 +27,10 @@ export class CustomersService {
     private readonly config: AppConfig,
   ) {}
 
-  list(scope: Scope, query: StoreFilterQueryDto) {
+  list(scope: Scope, query: CustomersQueryDto) {
     return this.customers.listFiltered(
       { storeId: scope.listStore(query.store_id), search: query.search },
-      { offset: query.offset, limit: query.rowLimit },
+      { offset: query.offset, limit: query.rowLimit, deleted: query.deleted ? 'only' : 'exclude' },
     );
   }
 
@@ -39,9 +39,12 @@ export class CustomersService {
   }
 
   private async assertPhoneFree(storeId: string, phone: string | null | undefined, current?: Customer) {
-    if (phone && phone !== current?.phone && (await this.customers.getByPhone(storeId, phone))) {
-      throw new ConflictError(`Phone '${phone}' is already registered in this store`);
+    if (!phone || phone === current?.phone) return;
+    const owner = await this.customers.getByPhone(storeId, phone);
+    if (owner?.deleted_at) {
+      throw new ConflictError(msg`Phone '${phone}' belongs to deleted customer ${owner.id}; restore it instead`);
     }
+    if (owner) throw new ConflictError(msg`Phone '${phone}' is already registered in this store`);
   }
 
   /**
@@ -53,13 +56,13 @@ export class CustomersService {
     const prefix = `${CODE_PREFIX}${todayMMDDYY(this.config.app.timezone)}`;
     await this.database.advisoryLock(prefix);
     const code = nextDailyCode(prefix, await this.customers.lastCodeWithPrefix(prefix), CODE_DIGITS);
-    if (!code) throw new BusinessRuleError(`Daily customer limit reached for ${prefix}`);
+    if (!code) throw new BusinessRuleError(msg`Daily customer limit reached for ${prefix}`);
     return code;
   }
 
   async create(scope: Scope, dto: CustomerCreateDto): Promise<Customer> {
     const storeId = scope.checkCreate(dto.store_id);
-    if (!(await this.stores.findById(storeId))) throw new NotFoundError(`Store ${storeId} not found`);
+    if (!(await this.stores.findById(storeId))) throw notFound('Store', storeId);
     await this.assertPhoneFree(storeId, dto.phone);
     const customer = await this.database.transaction(async () =>
       this.customers.insert({ ...dto, store_id: storeId, code: await this.nextCode() }),
@@ -82,10 +85,17 @@ export class CustomersService {
     return this.customers.update(id, { is_active: isActive });
   }
 
+  /** SOFT delete: past sales keep their customer; the profile picture is kept for a restore. */
   async delete(scope: Scope, id: string): Promise<void> {
-    const customer = await this.get(scope, id);
-    await this.customers.delete(id); // their sales keep existing with customer_id = NULL
-    await this.storage.deleteFile(customer.profile);
+    await this.get(scope, id);
+    await this.customers.delete(id);
+    this.logger.log(`Customer soft-deleted id=${id}`);
+  }
+
+  async restore(scope: Scope, id: string): Promise<Customer> {
+    const customer = scope.visible(await this.customers.findById(id, { withDeleted: true }), 'Customer', id);
+    if (!customer.deleted_at) throw new BusinessRuleError(msg`${term('Customer')} ${id} is not deleted`);
+    return this.customers.restore(id);
   }
 
   async uploadProfile(scope: Scope, id: string, file: Express.Multer.File | undefined): Promise<Customer> {
